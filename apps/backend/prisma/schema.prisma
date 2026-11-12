@@ -1,0 +1,375 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  SELLER
+  ADMIN
+}
+
+model User {
+  id       String  @id @default(uuid())
+  username String  @unique
+  email    String  @unique
+  password String?
+  role     Role    @default(USER)
+
+  profileImage   String?
+  profileImageId String?
+
+  googleId        String? @unique
+  isEmailVerified Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens           RefreshToken[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+
+  stores Store[] @relation("UserStores")
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String @id @default(uuid())
+  tokenHash String @unique
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@map("refresh_tokens")
+}
+
+model EmailVerificationToken {
+  id        String @id @default(uuid())
+  tokenHash String @unique
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String @id @default(uuid())
+  tokenHash String @unique
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("password_reset_tokens")
+}
+
+model Category {
+  id       String  @id @default(uuid())
+  name     String  @unique
+  image    String // Cloudinary secure_url, or an external URL if one was passed in directly
+  imageId  String? // Cloudinary public_id — only set when we uploaded the image ourselves
+  url      String  @unique // slug, e.g. "men-shoes"
+  featured Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subCategories SubCategory[]
+  products      Product[]
+
+  @@map("categories")
+}
+
+model SubCategory {
+  id       String  @id @default(uuid())
+  name     String
+  image    String
+  url      String  @unique
+  imageId  String? // Cloudinary public_id — needed to delete/replace the image
+  featured Boolean @default(false)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+
+  @@unique([categoryId, name])
+  @@map("sub_categories")
+}
+
+enum StoreStatus {
+  PENDING
+  ACTIVE
+  BANNED
+  DISABLED
+}
+
+model Store {
+  id                                  String      @id @default(uuid())
+  name                                String
+  description                         String      @db.Text
+  email                               String      @unique
+  phone                               String
+  url                                 String      @unique
+  logo                                String
+  logoId                              String? // Cloudinary public_id — set only when we uploaded it ourselves
+  cover                               String
+  coverId                             String? // Cloudinary public_id — set only when we uploaded it ourselves
+  status                              StoreStatus @default(PENDING)
+  averageRating                       Float       @default(0)
+  numReviews                          Int         @default(0)
+  featured                            Boolean     @default(false)
+  returnPolicy                        String      @default("Return in 30 days.")
+  defaultShippingService              String      @default("International Delivery")
+  defaultShippingFeePerItem           Float       @default(0)
+  defaultShippingFeeForAdditionalItem Float       @default(0)
+  defaultShippingFeePerKg             Float       @default(0)
+  defaultShippingFeeFixed             Float       @default(0)
+  defaultDeliveryTimeMin              Int         @default(7)
+  defaultDeliveryTimeMax              Int         @default(31)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  userId String
+  user   User   @relation("UserStores", fields: [userId], references: [id])
+
+  products      Product[]      @relation("StoreToProduct")
+  shippingRates ShippingRate[] @relation("StoreShippingRates")
+
+  @@index([userId])
+  @@map("stores")
+}
+
+enum WeightUnit {
+  kg
+  g
+  lb
+  oz
+}
+
+enum ProductStatus {
+  DRAFT // being built — never returned by public listings
+  ACTIVE // live on the storefront
+  ARCHIVED // pulled from sale, kept for order history
+}
+
+model Product {
+  id          String        @id @default(uuid())
+  name        String
+  description String        @db.Text
+  status      ProductStatus @default(DRAFT)
+
+  categoryId    String
+  category      Category    @relation(fields: [categoryId], references: [id])
+  subCategoryId String
+  subCategory   SubCategory @relation(fields: [subCategoryId], references: [id])
+
+  // Pricing
+  price          Float
+  compareAtPrice Float?
+  chargeTax      Boolean   @default(true)
+  isOnSale       Boolean   @default(false)
+  saleEndDate    DateTime?
+  costPerItem    Float? // never exposed to customers — margin calc only
+
+  // Inventory
+  sku                           String
+  barcode                       String?
+  trackQuantity                 Boolean @default(true)
+  quantity                      Int     @default(0)
+  continueSellingWhenOutOfStock Boolean @default(false)
+
+  // Shipping
+  isPhysicalProduct Boolean    @default(true)
+  weight            Float?
+  weightUnit        WeightUnit @default(kg)
+
+  keywords String[]
+
+  storeId String
+  store   Store  @relation("StoreToProduct", fields: [storeId], references: [id], onDelete: Cascade)
+
+  images    ProductImage[]
+  questions ProductQuestion[]
+  options   ProductOption[]
+  variants  ProductVariant[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  freeShipping FreeShipping? @relation("ProductFreeShipping")
+
+  @@unique([storeId, sku])
+  @@index([storeId])
+  @@index([categoryId])
+  @@index([subCategoryId])
+  @@index([status])
+  @@map("products")
+}
+
+model ProductImage {
+  id       String  @id @default(uuid())
+  url      String
+  imageId  String? // Cloudinary public_id — set only when we uploaded it ourselves
+  position Int     @default(0) // gallery display order
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@map("product_images")
+}
+
+model ProductQuestion {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  question  String
+  answer    String
+
+  @@index([productId])
+  @@map("product_questions")
+}
+
+// An option definition, e.g. name: "Size" with values ["S", "M", "L"]
+model ProductOption {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String
+
+  values ProductOptionValue[]
+
+  @@unique([productId, name])
+  @@map("product_options")
+}
+
+model ProductOptionValue {
+  id       String        @id @default(uuid())
+  optionId String
+  option   ProductOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  value    String
+  swatch   String? // CSS colour string, only meaningful for colour-type options
+
+  @@map("product_option_values")
+}
+
+// One row per combination of option values, e.g. "M / Ocean Blue"
+model ProductVariant {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  optionValues String[] // ordered to match the parent product's `options` order
+  name         String?
+  description  String?
+  image        String? // picked from the product's own `images`, not a separate upload
+
+  price          Float
+  compareAtPrice Float?
+  isOnSale       Boolean   @default(false)
+  saleEndDate    DateTime?
+  quantity       Int       @default(0)
+  sku            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@map("product_variants")
+}
+
+model Country {
+  id   String @id @default(uuid())
+  name String @unique
+  code String @unique
+
+  shippingRates         ShippingRate[]        @relation("CountryShippingRates")
+  freeShippingCountries FreeShippingCountry[] @relation("FreeShippingToCountry")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("countries")
+}
+
+model ShippingRate {
+  id String @id @default(uuid())
+
+  shippingService              String
+  shippingFeePerItem           Float
+  shippingFeeForAdditionalItem Float
+  shippingFeePerKg             Float
+  shippingFeeFixed             Float
+  deliveryTimeMin              Int
+  deliveryTimeMax              Int
+  returnPolicy                 String
+
+  countryId String
+  country   Country @relation("CountryShippingRates", fields: [countryId], references: [id])
+
+  storeId String
+  store   Store  @relation("StoreShippingRates", fields: [storeId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([storeId, countryId])
+  @@index([countryId])
+  @@map("shipping_rates")
+}
+
+model FreeShipping {
+  id        String  @id @default(uuid())
+  productId String  @unique
+  product   Product @relation("ProductFreeShipping", fields: [productId], references: [id], onDelete: Cascade)
+
+  eligibleCountries FreeShippingCountry[] @relation("FreeShippingCountries")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("free_shippings")
+}
+
+model FreeShippingCountry {
+  id String @id @default(uuid())
+
+  freeShippingId String
+  freeShipping   FreeShipping @relation("FreeShippingCountries", fields: [freeShippingId], references: [id], onDelete: Cascade)
+
+  countryId String
+  country   Country @relation("FreeShippingToCountry", fields: [countryId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([freeShippingId, countryId])
+  @@index([countryId])
+  @@map("free_shipping_countries")
+}
