@@ -1,4 +1,4 @@
-# [Project Name]
+# Multivendor-Ecommerce
 
 A multivendor ecommerce platform where multiple sellers run their own stores on a single marketplace. It is built as a Turborepo monorepo with a **NestJS** API and a **Next.js** frontend, sharing types and tooling across both apps.
 
