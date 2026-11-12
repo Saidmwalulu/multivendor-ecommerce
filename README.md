@@ -15,7 +15,8 @@ Multivendor-Ecommerce supports three kinds of users:
 - **Frontend:** Next.js, TypeScript
 - **Backend:** NestJS, TypeScript
 - **Monorepo:** Turborepo with pnpm workspaces
-- **Database:** [e.g. PostgreSQL with Prisma]
+- **Database:** PostgreSQL in docker
+- **ORM:** Prisma
 
 ## Repository Structure
 
